@@ -1,37 +1,29 @@
 #!/bin/bash
-
 KLIPPER_PATH="${HOME}/klipper"
 AUTOTUNETMC_PATH="${HOME}/klipper_tmc_autotune"
-
 if [[ -e ${KLIPPER_PATH}/klippy/plugins/ ]]; then
     KLIPPER_PLUGINS_PATH="${KLIPPER_PATH}/klippy/plugins/"
 else
     KLIPPER_PLUGINS_PATH="${KLIPPER_PATH}/klippy/extras/"
 fi
-
 set -eu
 export LC_ALL=C
-
-
 function preflight_checks {
     if [ "$EUID" -eq 0 ]; then
         echo "[PRE-CHECK] This script must not be run as root!"
         exit -1
     fi
-
-    if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -F 'klipper.service')" ]; then
+    if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -E 'klipper.*\.service')" ]; then
         printf "[PRE-CHECK] Klipper service found! Continuing...\n\n"
     else
         echo "[ERROR] Klipper service not found, please install Klipper first!"
         exit -1
     fi
 }
-
 function check_download {
     local autotunedirname autotunebasename
     autotunedirname="$(dirname ${AUTOTUNETMC_PATH})"
     autotunebasename="$(basename ${AUTOTUNETMC_PATH})"
-
     if [ ! -d "${AUTOTUNETMC_PATH}" ]; then
         echo "[DOWNLOAD] Downloading Autotune TMC repository..."
         if git -C $autotunedirname clone https://github.com/andrewmcgr/klipper_tmc_autotune.git $autotunebasename; then
@@ -45,27 +37,22 @@ function check_download {
         printf "[DOWNLOAD] Autotune TMC repository already found locally. Continuing...\n\n"
     fi
 }
-
 function link_extension {
     echo "[INSTALL] Linking extension to Klipper..."
-
     ln -srfn "${AUTOTUNETMC_PATH}/autotune_tmc.py" "${KLIPPER_PLUGINS_PATH}/autotune_tmc.py"
     ln -srfn "${AUTOTUNETMC_PATH}/motor_constants.py" "${KLIPPER_PLUGINS_PATH}/motor_constants.py"
     ln -srfn "${AUTOTUNETMC_PATH}/motor_database.cfg" "${KLIPPER_PLUGINS_PATH}/motor_database.cfg"
 }
-
 function restart_klipper {
-    echo "[POST-INSTALL] Restarting Klipper..."
-    sudo systemctl restart klipper
+    echo "[POST-INSTALL] Restarting Klipper services..."
+    for service in $(sudo systemctl list-units --full -all -t service --no-legend | grep -E 'klipper.*\.service' | awk '{print $1}'); do
+        echo "Restarting $service..."
+        sudo systemctl restart "$service"
+    done
 }
-
-
 printf "\n======================================\n"
 echo "- Autotune TMC install script -"
 printf "======================================\n\n"
-
-
-# Run steps
 preflight_checks
 check_download
 link_extension
